@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>THE KING: SURVIVAL MULTIPLAYER PRO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        body { background: #000; overflow: hidden; margin: 0; color: white; touch-action: none; }
+        #gameCanvas { display: block; background: #1a3c15; }
+        .ui { position: fixed; top: 10px; left: 10px; pointer-events: none; text-shadow: 2px 2px #000; }
+        .owner-panel { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); border: 2px solid gold; padding: 10px; display: none; pointer-events: auto; }
+    </style>
+</head>
+<body onmousedown="attack()">
+
+    <div class="ui font-mono">
+        <h1 class="text-xl font-black text-red-600">FOREST SLAYER V3</h1>
+        <p>❤️ HP: <span id="hp">100</span> | 🪵 WOOD: <span id="wood">0</span></p>
+        <p>👤 ID: <span id="my-id-display">Connecting...</span></p>
+    </div>
+
+    <div id="owner-panel" class="owner-panel font-mono text-xs">
+        <h2 class="text-yellow-500 font-bold mb-2">👑 OWNER GOD PANEL</h2>
+        <button onclick="toggleGodMode()" class="bg-blue-700 w-full mb-1 p-1">GOD MODE: <span id="god-status">OFF</span></button>
+        <button onclick="instantWood()" class="bg-green-700 w-full mb-1 p-1">+100 WOOD</button>
+        <button onclick="clearEnemies()" class="bg-red-700 w-full p-1">CLEAR BEASTS</button>
+        <div id="player-list" class="mt-2 text-[10px] text-gray-400 italic">Players Online...</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // 1. KONEKSI FIREBASE (URL DARI SCREENSHOT LU)
+        const firebaseConfig = {
+            databaseURL: "https://wa-slayer-pro-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 2. PLAYER IDENTITY
+        const rawName = prompt("MASUKKAN NAMA (Pake OWNER_ di depan buat Panel):", "Player");
+        const myId = rawName + "_" + Math.floor(Math.random()*999);
+        document.getElementById('my-id-display').innerText = myId;
+
+        if(myId.startsWith("OWNER_")) {
+            document.getElementById('owner-panel').style.display = 'block';
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let player = { x: 500, y: 300, hp: 100, wood: 0, godMode: false };
+        let otherPlayers = {};
+        let enemies = [];
+        let isNight = false;
+
+        // 3. MULTIPLAYER SYNC
+        db.ref('players/' + myId).onDisconnect().remove();
+        
+        db.ref('players').on('value', (snap) => {
+            otherPlayers = snap.val() || {};
+            updatePlayerList();
+        });
+
+        function update() {
+            // Movement (Pake WASD)
+            const speed = 5;
+            if (keys['w']) player.y -= speed;
+            if (keys['s']) player.y += speed;
+            if (keys['a']) player.x -= speed;
+            if (keys['d']) player.x += speed;
+
+            // Day Night Cycle (Tergantung Detik Realtime)
+            isNight = (new Date().getSeconds() % 30 > 15);
+
+            // Update Firebase
+            db.ref('players/' + myId).set({
+                x: player.x,
+                y: player.y,
+                hp: player.hp,
+                god: player.godMode
+            });
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        const keys = {};
+        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
+
+        // 4. OWNER FUNCTIONS
+        function toggleGodMode() {
+            player.godMode = !player.godMode;
+            document.getElementById('god-status').innerText = player.godMode ? "ON" : "OFF";
+        }
+        function instantWood() { player.wood += 100; }
+        function clearEnemies() { enemies = []; }
+
+        function updatePlayerList() {
+            let list = "";
+            Object.keys(otherPlayers).forEach(id => {
+                list += `> ${id} <br>`;
+            });
+            document.getElementById('player-list').innerHTML = list;
+        }
+
+        function draw() {
+            ctx.fillStyle = isNight ? '#050a05' : '#1e461e';
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+
+            // Gambar Player Lain
+            Object.keys(otherPlayers).forEach(id => {
+                if(id !== myId) {
+                    let p = otherPlayers[id];
+                    ctx.fillStyle = p.god ? "gold" : "purple";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, 7); ctx.fill();
+                    ctx.fillStyle = "white"; ctx.fillText(id, p.x - 20, p.y - 35);
+                }
+            });
+
+            // Gambar Diri Sendiri
+            ctx.fillStyle = player.godMode ? 'gold' : '#3498db';
+            ctx.beginPath(); ctx.arc(player.x, player.y, 25, 0, 7); ctx.fill();
+
+            document.getElementById('hp').innerText = player.godMode ? "∞" : Math.floor(player.hp);
+            document.getElementById('wood').innerText = player.wood;
+        }
+
+        update();
+    </script>
+</body>
+</html>
